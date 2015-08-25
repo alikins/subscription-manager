@@ -164,10 +164,12 @@ class RegisterWidget(widgets.SubmanBaseWidget):
 
     __gsignals__ = {'proceed': (ga_GObject.SignalFlags.RUN_FIRST,
                                 None, []),
-                    'register-warning': (ga_GObject.SignalFlags.RUN_FIRST,
+                    # info is like register-error, but no exc_info
+                    'register-message': (ga_GObject.SignalFlags.RUN_FIRST,
                                          None, (ga_GObject.TYPE_PYOBJECT,)),
                     'register-error': (ga_GObject.SignalFlags.RUN_FIRST,
                                        None, (ga_GObject.TYPE_PYOBJECT,
+                                              ga_GObject.TYPE_PYOBJECT,
                                               ga_GObject.TYPE_PYOBJECT)),
                     'finished': (ga_GObject.SignalFlags.RUN_FIRST,
                                  None, []),
@@ -331,18 +333,18 @@ class RegisterWidget(widgets.SubmanBaseWidget):
     # This should always get run first, when this widget emits a
     # 'register-error', then it's emitted to other handlers (namely,
     # any parent dialogs handlers it has set up
-    def do_register_error(self, msg, exc_info):
-        log.debug("RW.do_register_error msg=%s exc_info=%s",
-                   msg, exc_info)
+    def do_register_error(self, msg, level, exc_info):
+        log.debug("RW.do_register_error msg=%s level=%s exc_info=%s",
+                   msg, level, exc_info)
 
         # return to the last gui screen we showed
         self._set_screen(self.screen_history[-1])
 
     # Handler for 'register-error' signals emitted from the Screens, then
     # emit one ourselves.
-    def _on_screen_register_error(self, obj, msg, exc_info):
-        log.debug("_on_screen_register_error obj=%s msg=%s exc_info=%s",
-                  obj, msg, exc_info)
+    def _on_screen_register_error(self, obj, msg, level, exc_info):
+        log.debug("_on_screen_register_error obj=%s msg=%s level=%s exc_info=%s",
+                  obj, msg, level, exc_info)
 
         # Now emit a new signal for parent widget and self.do_register_error()
         # to handle
@@ -512,6 +514,7 @@ class RegisterDialog(widgets.SubmanBaseWidget):
         # initial-setup will likely handle these itself
         self.register_widget.connect('finished', self.cancel)
         self.register_widget.connect('register-error', self.on_register_error)
+        self.register_widget.connect('register-message', self.on_register_message)
 
         # update window title on register state changes
         self.register_widget.info.connect('notify::register-state',
@@ -561,6 +564,7 @@ class RegisterDialog(widgets.SubmanBaseWidget):
         self.error_dialog(obj, message)
 
     def error_dialog(self, obj, msg):
+        # This could be replaced with an InfoBar ala initial-setup
         show_error_window(msg)
 
     def _on_register_button_clicked(self, button):
@@ -614,8 +618,9 @@ class Screen(widgets.SubmanBaseWidget):
                     'attach-finished': (ga_GObject.SignalFlags.RUN_FIRST,
                                  None, []),
                     'register-error': (ga_GObject.SignalFlags.RUN_FIRST,
-                              None, (ga_GObject.TYPE_PYOBJECT,
-                                     ga_GObject.TYPE_PYOBJECT)),
+                              None, (ga_GObject.TYPE_PYOBJECT,       # msg
+                                     ga_GOBject.TYPE_PYOBJECT,       # level
+                                     ga_GObject.TYPE_PYOBJECT)),     # exc_info
                     'move-to-screen': (ga_GObject.SignalFlags.RUN_FIRST,
                                      None, (int,))}
 
@@ -668,6 +673,7 @@ class NoGuiScreen(ga_GObject.GObject):
                                  None, []),
                     'register-error': (ga_GObject.SignalFlags.RUN_FIRST,
                               None, (ga_GObject.TYPE_PYOBJECT,
+                                     ga_GObject.TYPE_PYOBJECT,
                                      ga_GObject.TYPE_PYOBJECT)),
                     'certs-updated': (ga_GObject.SignalFlags.RUN_FIRST,
                                       None, [])}
@@ -1565,6 +1571,7 @@ class AsyncBackend(object):
                 log.exception(cert_update_ex)
             self.queue.put((callback, None, sys.exc_info()))
             return
+        # No useful retval?
         self.queue.put((callback, None, None))
 
     # This guy is really ugly to run in a thread, can we run it

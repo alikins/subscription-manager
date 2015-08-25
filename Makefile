@@ -591,7 +591,7 @@ debuglint:
 # find widgets used as passed to init of SubscriptionManagerTab,
 # find the widgets we actually find in the glade files
 # see if any used ones are not defined
-.PHONY: find-missing-signals
+.PHONY: find-missing-widgets
 find-missing-widgets:
 	@TMPFILE=`mktemp` || exit 1; \
 	USED_WIDGETS=`mktemp` ||exit 1; \
