@@ -135,10 +135,15 @@ class RegisterInfo(ga_GObject.GObject):
 
     # split into AttachInfo or FindSlaInfo?
     current_sla = ga_GObject.property(type=ga_GObject.TYPE_PYOBJECT, default=None)
+    preferred_sla = ga_GObject.property(type=ga_GObject.TYPE_PYOBJECT, default=None)
+    #sla_preferences = ga_GObject.property(type=ga_GObject.TYPE_PYOBJECT, default=[])
     dry_run_result = ga_GObject.property(type=ga_GObject.TYPE_PYOBJECT, default=None)
 
-    # registergui states
+    # register behaviour options
     skip_auto_bind = ga_GObject.property(type=bool, default=False)
+    force = ga_GObject.property(type=bool, default=False)
+
+    # registergui state info
     details_label_txt = ga_GObject.property(type=str, default='')
     register_state = ga_GObject.property(type=int, default=REGISTERING)
 
@@ -277,8 +282,10 @@ class RegisterWidget(widgets.SubmanBaseWidget):
                                                               tab_label=None)
 
     def initialize(self):
+        log.debug("RegisterWidget.initialize")
         self.set_initial_screen()
         self.clear_screens()
+        self.populate_screens()
         # TODO: move this so it's only running when a progress bar is "active"
         self.register_widget.show_all()
 
@@ -476,6 +483,10 @@ class RegisterWidget(widgets.SubmanBaseWidget):
     def clear_screens(self):
         for screen in self._screens:
             screen.clear()
+
+    def populate_screens(self):
+        for screen in self._screens:
+            screen.populate()
 
     def _timeout_callback(self):
         """Callback used to drive the progress bar 'pulse'."""
@@ -677,6 +688,9 @@ class Screen(widgets.SubmanBaseWidget):
     def clear(self):
         pass
 
+    def populate(self):
+        pass
+
 
 class NoGuiScreen(ga_GObject.GObject):
     screen_enum = None
@@ -722,6 +736,9 @@ class NoGuiScreen(ga_GObject.GObject):
         pass
 
     def clear(self):
+        pass
+
+    def populate(self):
         pass
 
 
@@ -889,21 +906,36 @@ class SelectSLAScreen(Screen):
         self.product_list_label.set_text(
                 self._format_prods(unentitled_prod_certs))
         group = None
+
+        # The sla the user or kickstart requested
+        preferred_sla = self.info.get_property('preferred_sla')
+        log.debug("SelectSLAScreen.set_model preferred_sla=%s", preferred_sla)
+
         # reverse iterate the list as that will most likely put 'None' last.
         # then pack_start so we don't end up with radio buttons at the bottom
         # of the screen.
+        chose_default = False
         for sla in reversed(sla_data_map.keys()):
+            log.debug("...sla=%s", sla)
             radio = ga_Gtk.RadioButton(group=group, label=sla)
             radio.connect("toggled",
                           self._radio_clicked,
                           (sla, sla_data_map))
+            # Use the user preferred sla as the default
+            # May need to handle preferred_sla not being in the suggested slas
+            if preferred_sla and preferred_sla == sla:
+                log.debug("setting %s to active for %s", radio, sla)
+                radio.set_active(True)
+                chose_default = True
+
             self.sla_radio_container.pack_start(radio, expand=False,
                                                 fill=False, padding=0)
             radio.show()
             group = radio
 
-        # set the initial radio button as default selection.
-        group.set_active(True)
+        if not chose_default:
+            # set the initial radio button as default selection.
+            group.set_active(True)
 
     def apply(self):
         self.emit('move-to-screen', CONFIRM_SUBS_PAGE)
@@ -914,6 +946,7 @@ class SelectSLAScreen(Screen):
             self.sla_radio_container.remove(child)
 
     def _radio_clicked(self, button, data):
+        log.debug("_radio_clicked: button=%s, data=%s", button, data)
         sla, sla_data_map = data
 
         if button.get_active():
@@ -966,6 +999,11 @@ class SelectSLAScreen(Screen):
                           _("Error subscribing"),
                           error)
                 return
+
+        # We have a lot of SLA options.
+        # current_sla = the sla that the Consumer from candlepin has
+        #               set in its 'serviceLevel' attribute
+        # info.sla_preferences is a ordered list of slas
 
         (current_sla, unentitled_products, sla_data_map) = result
 
@@ -1204,6 +1242,20 @@ class CredentialsScreen(Screen):
             return False
         return True
 
+    def populate(self):
+        log.debug("Credentials.populate")
+        if self.info.get_property('username'):
+            self.account_login.set_text(self.info.get_property('username'))
+
+        if self.info.get_property('password'):
+            self.account_password.set_text(self.info.get_property('password'))
+
+        if self.info.get_property('consumername'):
+            self.consumer_name.set_text(self.info.get_property('consumername'))
+
+        if self.info.get_property('skip-auto-bind'):
+            self.skip_auto_bind.set_active(self.info.get_property('skip-auto-bind'))
+
     def pre(self):
         self.info.set_property('details-label-txt', self.pre_message)
         self.account_login.grab_focus()
@@ -1321,7 +1373,8 @@ class RefreshSubscriptionsScreen(NoGuiScreen):
         super(RefreshSubscriptionsScreen, self).__init__(reg_info, async_backend, facts, parent_window)
         self.pre_message = _("Attaching subscriptions")
 
-    def _on_refresh_cb(self, error=None):
+    def _on_refresh_cb(self, msg, error=None):
+        log.debug("_on_refresh_cb: error=%s msg=%s", error, msg)
         if error is not None:
             self.emit('register-error',
                       _("Error subscribing: %s"),
@@ -1374,6 +1427,25 @@ class ChooseServerScreen(Screen):
             reset_resolver()
         except Exception, e:
             log.warn("Error from reset_resolver: %s", e)
+
+    def populate(self):
+        log.debug("ChooseServer.populate")
+        log.debug("hostname=%s port=%s prefix=%s", self.info.get_property('hostname'),
+                                                   self.info.get_property('port'),
+                                                   self.info.get_property('prefix'))
+
+        self.set_server_entry(self.info.get_property('hostname'),
+                              self.info.get_property('port'),
+                              self.info.get_property('prefix'))
+
+        activation_keys = self.info.get_property('activation_keys')
+
+        if activation_keys:
+            self.activation_key_checkbox.set_active(True)
+        else:
+            self.activation_key_checkbox.set_active(False)
+
+        return False
 
     def apply(self):
         self.stay()
@@ -1430,12 +1502,17 @@ class ChooseServerScreen(Screen):
         current_port = CFG.get('server', 'port')
         current_prefix = CFG.get('server', 'prefix')
 
+        self.set_server_entry(current_hostname,
+                              current_port,
+                              current_prefix)
+
+    def set_server_entry(self, hostname, port, prefix):
         # No need to show port and prefix for hosted:
-        if current_hostname == config.DEFAULT_HOSTNAME:
+        if hostname == config.DEFAULT_HOSTNAME:
             self.server_entry.set_text(config.DEFAULT_HOSTNAME)
         else:
-            self.server_entry.set_text("%s:%s%s" % (current_hostname,
-                    current_port, current_prefix))
+            self.server_entry.set_text("%s:%s%s" % (hostname,
+                                       port, prefix))
 
 
 class AsyncBackend(object):

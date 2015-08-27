@@ -48,33 +48,32 @@ __all__ = ["RHSMSpoke"]
 
 class RHSMSpoke(FirstbootOnlySpokeMixIn, NormalSpoke):
     buildrObjects = ["RHSMSpokeWindow"]
-
     mainWidgetName = "RHSMSpokeWindow"
-
     uiFile = "rhsm_gui.ui"
-    
     helpFile = "SubscriptionManagerSpoke.xml"
-
     category = SystemCategory
-
     icon = "face-cool-symbolic"
-
     title = "Subscription Manager"
 
     def __init__(self, data, storage, payload, instclass):
-        NormalSpoke.__init__(self, data, storage, payload, instclass)
+        NormalSpoke.__init__(self, date, storage, payload, instclass)
         self._done = False
 
     def initialize(self):
         NormalSpoke.initialize(self)
         self._done = False
         init_dep_injection()
+        log.debug("self.data=%s", self.data)
+        log.debug("type(self.data)=%s", type(self.data))
+        #self._data = self.data.addons.com_redhat_subscription_manager
 
         facts = inj.require(inj.FACTS)
 
         backend = managergui.Backend()
 
+        self.info = registergui.RegisterInfo()
         self.register_widget = registergui.RegisterWidget(backend, facts,
+                                                          reg_info=self.info,
                                                           parent_window=self.main_window)
 
         self.register_box = self.builder.get_object("register_box")
@@ -118,7 +117,35 @@ class RHSMSpoke(FirstbootOnlySpokeMixIn, NormalSpoke):
     def refresh(self):
         log.debug("data.addons.com_redhat_subscription_manager %s",
                   self.data.addons.com_redhat_subscription_manager)
-        pass
+        if self._data.serverurl:
+            log.debug("serverurl=%s", self._data.serverurl)
+            (hostname, port, prefix) = utils.parse_server_info(self._data.serverurl)
+            self.info.set_property('hostname', hostname)
+            self.info.set_property('port', port)
+            self.info.set_property('prefix', prefix)
+
+        if self._addon_data.username:
+            self.info.set_property('username', self._addon_data.username)
+
+        if self._addon_data.password:
+            self.info.set_property('password', self._addon_data.password)
+
+        if self._addon_data.org:
+            self.info.set_property('owner_key', self._addon_data.org)
+
+        if self._addon_data.activationkeys:
+            self.info.set_property('activation_keys', self._addon_data.activationkeys)
+
+        # TODO: support a ordered list of sla preferences?
+        if self._addon_data.servicelevel:
+            # NOTE: using the first sla in servicelevel only currently
+            self.info.set_property('preferred_sla',
+                                   self._addon_data.servicelevel[0])
+
+        if self._addon_data.force:
+            self.info.set_property('force', True)
+
+        self.register_widget.populate_screens()
 
     # take info from the gui widgets and set into the self.data
     def apply(self):
