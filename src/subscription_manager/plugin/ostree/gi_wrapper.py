@@ -33,9 +33,11 @@ parser.add_option("--deployed-origin", dest="deployed_origin",
 (options, args) = parser.parse_args()
 
 if options.deployed_origin:
-    sysroot = OSTree.Sysroot.new_default()
-    sysroot.load(None)
-    booted = sysroot.get_booted_deployment()
-    if booted:
-        deploydir = sysroot.get_deployment_directory(booted)
-        print(sysroot.get_deployment_origin_path(deploydir).get_path())
+
+from gi.repository import OSTree
+
+sysroot = OSTree.Sysroot.new_default()
+sysroot.load(None)
+booted = sysroot.get_booted_deployment()
+deploydir = sysroot.get_deployment_directory(booted)
+sysroot.get_deployment_origin_path(deploydir).get_path())
