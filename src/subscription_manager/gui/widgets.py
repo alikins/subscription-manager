@@ -541,7 +541,7 @@ class ContractSubDetailsWidget(SubDetailsWidget):
         # start_end_date_text widget so we can restore it in the
         # clear() function.
         # FIXME
-        #self.original_bg = self.start_end_date_text.rc_get_style().base[ga_Gtk.StateType.NORMAL]
+        # self.original_bg = self.start_end_date_text.rc_get_style().base[ga_Gtk.StateType.NORMAL]
         # FIXME
 
     def _show_other_details(self, name, contract=None, start=None, end=None, account=None,
@@ -564,10 +564,10 @@ class ContractSubDetailsWidget(SubDetailsWidget):
         self._set(self.virt_only_text, virt_only)
 
     def _clear_other_details(self):
-        #Clear row highlighting
+        # Clear row highlighting
 
         # FIXME
-        #self.start_end_date_text.modify_base(ga_Gtk.StateType.NORMAL, self.original_bg)
+        # self.start_end_date_text.modify_base(ga_Gtk.StateType.NORMAL, self.original_bg)
         # FIXME
 
         self._set(self.contract_number_text, "")
@@ -591,7 +591,7 @@ class ContractSubDetailsWidget(SubDetailsWidget):
             return self.warning_color
 
         # FIXME, try to return the orig color, or remove this?
-        #return self.original_bg
+        # return self.original_bg
         return self.expired_color
         # FIXME
 
@@ -607,7 +607,7 @@ class CellRendererDate(ga_Gtk.CellRendererText):
                 ga_GObject.PARAM_READWRITE)
     }
 
-    #def __init__(self):
+    # def __init__(self):
     #    GObject.GObject.__init__(self)
 
     def do_set_property(self, prop, value):
@@ -637,7 +637,7 @@ class DatePicker(ga_Gtk.HBox):
         Initialize the DatePicker. date is a python datetime.date object.
         """
         super(DatePicker, self).__init__()
-        #GObject.GObject.__init__(self)
+        # GObject.GObject.__init__(self)
 
         image = ga_Gtk.Image.new_from_icon_name('x-office-calendar', ga_Gtk.IconSize.MENU)
         image.show()
