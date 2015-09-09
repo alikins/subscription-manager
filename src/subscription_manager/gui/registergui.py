@@ -186,7 +186,6 @@ class RegisterWidget(widgets.SubmanBaseWidget):
         super(RegisterWidget, self).__init__()
 
         self.backend = backend
-        self.identity = require(IDENTITY)
         self.facts = facts
 
         self.async = AsyncBackend(self.backend)
@@ -242,7 +241,7 @@ class RegisterWidget(widgets.SubmanBaseWidget):
         for idx, screen_class in enumerate(screen_classes):
             self.add_screen(idx, screen_class)
 
-        self._current_screen = None
+        self._current_screen = self.initial_screen
 
         # Track screens we "show" so we can choose a reasonable error screen
         self.screen_history = []
@@ -286,13 +285,13 @@ class RegisterWidget(widgets.SubmanBaseWidget):
         self.set_initial_screen()
         self.clear_screens()
         self.populate_screens()
+
         # TODO: move this so it's only running when a progress bar is "active"
         self.register_widget.show_all()
 
     @property
     def current_screen(self):
         return self._screens[self._current_screen]
-
 
 # Class closure signal handlers that are invoked first if this GObject
 # emits a signal they are connected to.
@@ -322,8 +321,9 @@ class RegisterWidget(widgets.SubmanBaseWidget):
 # methods for moving around between screens and tracking the state
 
     def set_initial_screen(self):
-        self._set_screen(self.initial_screen)
-        self._current_screen = self.initial_screen
+        log.debug("set_initial_screen current_screen=%s", self.current_screen)
+        self.current_screen.emit('move-to-screen', self.initial_screen)
+
         self.screen_history = [self.initial_screen]
 
     def _on_stay_on_screen(self, current_screen):
@@ -401,6 +401,7 @@ class RegisterWidget(widgets.SubmanBaseWidget):
 
     # switch-page should be after the current screen is reset
     def _on_switch_page(self, notebook, page, page_num):
+        log.debug("_on_switch_page page=%s page_num=%s", page, page_num)
         if self.current_screen.button_label:
             self.set_property('register-button-label',
                               self.current_screen.button_label)
@@ -556,8 +557,13 @@ class RegisterDialog(widgets.SubmanBaseWidget):
         self.register_button.connect('clicked', self._on_register_button_clicked)
         self.cancel_button.connect('clicked', self.cancel)
 
+        # update window title on register state changes
+        self.reg_info.connect('notify::register-state',
+                               self._on_register_state_change)
+
         self.window = self.register_dialog
 
+        log.debug("RegisterDIalog.__init__")
         # FIXME: needed by firstboot
         self.password = None
 
@@ -570,17 +576,14 @@ class RegisterDialog(widgets.SubmanBaseWidget):
                                          reg_info=reg_info,
                                          parent_window=parent_window)
 
+        log.debug("created_register_widget")
         # Ensure that we start on the first page and that
         # all widgets are cleared.
-        register_widget.initialize()
+        # register_widget.initialize()
 
         # initial-setup will likely handle these itself
         register_widget.connect('finished', self.cancel)
         register_widget.connect('register-error', self.on_register_error)
-
-        # update window title on register state changes
-        register_widget.info.connect('notify::register-state',
-                                      self._on_register_state_change)
 
         # update the 'next/register button on page change'
         register_widget.connect('notify::register-button-label',
@@ -589,6 +592,7 @@ class RegisterDialog(widgets.SubmanBaseWidget):
         return register_widget
 
     def initialize(self):
+        log.debug("RegisterDialog.initialize")
         self.register_widget.initialize()
 
     def show(self):
@@ -1539,6 +1543,14 @@ class ChooseServerScreen(Screen):
         else:
             self.server_entry.set_text("%s:%s%s" % (hostname,
                                        port, prefix))
+
+    def pre(self):
+        log.debug("ChooseServerScreen.pre")
+        log.debug("register-state=%s",
+                  self.info.get_property('register-state'))
+        log.debug("info.identity=%s", self.info.identity)
+
+        return False
 
 
 class AsyncBackend(object):
