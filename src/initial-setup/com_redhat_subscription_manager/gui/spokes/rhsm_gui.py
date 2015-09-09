@@ -58,6 +58,7 @@ class RHSMSpoke(FirstbootOnlySpokeMixIn, NormalSpoke):
     def __init__(self, data, storage, payload, instclass):
         NormalSpoke.__init__(self, date, storage, payload, instclass)
         self._done = False
+        self._status_message = ""
 
     def initialize(self):
         NormalSpoke.initialize(self)
@@ -97,6 +98,10 @@ class RHSMSpoke(FirstbootOnlySpokeMixIn, NormalSpoke):
         # update the 'next/register button on page change'
         self.register_widget.connect('notify::register-button-label',
                                        self._on_register_button_label_change)
+
+        self.reg_info.connect('notify::register-status', self._on_register_status_change)
+        self.reg_info.connect('notify::dry-run-result', self._on_dry_run_result_change)
+        # We could watch dry-run-result
 
         self.register_box.show_all()
         self.register_widget.initialize()
@@ -149,11 +154,13 @@ class RHSMSpoke(FirstbootOnlySpokeMixIn, NormalSpoke):
 
     # take info from the gui widgets and set into the self.data
     def apply(self):
+        log.debug("apply")
         self.data.addons.com_redhat_subscription_manager.text = \
             "System is registered to Red Hat Subscription Management."
 
     # when the spoke is left, this can run anything that happens
     def execute(self):
+        log.debug("execute")
         pass
 
     def cancel(self, button):
@@ -183,11 +190,7 @@ class RHSMSpoke(FirstbootOnlySpokeMixIn, NormalSpoke):
     # under the spokes name on it's hub.
     @property
     def status(self):
-        if self._done:
-            # TODO: add consumer uuid, products, etc?
-            return "System is registered to RHSM."
-        else:
-            return "System is not registered to RHSM."
+        return self._status_message
 
     def _on_register_button_clicked(self, button):
         # unset any error info
@@ -202,6 +205,15 @@ class RHSMSpoke(FirstbootOnlySpokeMixIn, NormalSpoke):
         else:
             log.error(msg)
             self.set_error(msg)
+
+    def _on_register_status_change(self, obj, value):
+        self._status_message = obj.get_property('register-status')
+        #self.status = self._status_message
+        log.debug("register-status %s", self._status_message)
+
+    def _on_dry_run_result_change(self, obj, value):
+        dry_run_result = obj.get_property('register-status')
+        log.debug("dry_run_result changed to: %s", dry_run_result)
 
     def _on_register_button_label_change(self, obj, value):
         register_label = obj.get_property('register-button-label')
