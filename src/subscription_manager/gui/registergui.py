@@ -298,6 +298,10 @@ class RegisterWidget(widgets.SubmanBaseWidget):
             ga_GObject.source_remove(self.progress_timer)
             self.progress_timer = None
 
+    @property
+    def current_screen(self):
+        return self._screens[self._current_screen]
+
     def set_initial_screen(self):
         self._set_screen(self.initial_screen)
         self._current_screen = self.initial_screen
@@ -305,10 +309,9 @@ class RegisterWidget(widgets.SubmanBaseWidget):
 
     # switch-page should be after the current screen is reset
     def _on_switch_page(self, notebook, page, page_num):
-        current_screen = self._screens[self._current_screen]
-        # NonGuiScreens have a None button label
-        if current_screen.button_label:
-            self.set_property('register-button-label', current_screen.button_label)
+        if self.current_screen.button_label:
+            self.set_property('register-button-label',
+                              self.current_screen.button_label)
 
     # HMMM: If the connect/backend/async, and the auth info is composited into
     #       the same GObject, these could be class closure handlers
@@ -364,6 +367,10 @@ class RegisterWidget(widgets.SubmanBaseWidget):
 
     def _on_stay_on_screen(self, current_screen):
         """A 'stay-on-screen' handler, for errors that need to be corrected before proceeding.
+
+
+        The current_screen is a Screen() subclass instance, the screen that emitted
+        the 'stay-on-screen'.
 
         A screen has been shown, and error handling emits this to indicate the
         widget should not move to a different screen.
@@ -428,7 +435,8 @@ class RegisterWidget(widgets.SubmanBaseWidget):
 
     def apply_current_screen(self):
         """Extract any info from the widgets and call the screens apply()."""
-        self._screens[self._current_screen].apply()
+        self.current_screen.apply()
+        #self._screens[self._current_screen].apply()
 
     def _on_screen_register_finished(self, obj):
         """Handler for 'register-finished' signal, indicating register is finished.
@@ -613,8 +621,6 @@ class RegisterDialog(widgets.SubmanBaseWidget):
 
     def _on_register_button_label_change(self, obj, value):
         register_label = obj.get_property('register-button-label')
-        # FIXME: button_label can be None for NonGuiScreens. Seems like
-        #
         if register_label:
             self.register_button.set_label(register_label)
 
@@ -740,6 +746,13 @@ class NoGuiScreen(ga_GObject.GObject):
 
     def populate(self):
         pass
+
+
+class DetectIfRegisteredScreen(NoGuiScreen):
+    screen_enum = DETECT_IF_REGISTERED_PAGE
+
+    def __init__(self, reg_info, async_backend, facts, parent_window):
+        super(DetectIfRegisteredScreen, self).__init__(reg_info, async_backend, facts, parent_window)
 
 
 class PerformRegisterScreen(NoGuiScreen):
