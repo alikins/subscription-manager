@@ -18,10 +18,18 @@
 """Module with the RHSM initial-setup class."""
 
 import logging
+import sys
 
 from pyanaconda.addons import AddonData
+from pyanaconda.iutil import getSysroot
 
 log = logging.getLogger(__name__)
+
+RHSM_PATH = "/usr/share/rhsm"
+sys.path.append(RHSM_PATH)
+
+# For now, until we move all the logic out of managercli
+from subscription_manager import managercli
 
 # export RHSMAddonData class to prevent Anaconda's collect method from taking
 # AddonData class instead of the RHSMAddonData class
@@ -47,6 +55,11 @@ __all__ = ["RHSMAddonData"]
 
     # If we should attempt to auto-attach
 %end
+
+NOTES:
+# Add a version 'cli' so I can change the format later
+%addon com_redhat_subscription_manager --ksversion=1.0
+
 """
 
 # To test
@@ -55,6 +68,12 @@ __all__ = ["RHSMAddonData"]
 # inline yum.repo
 # if anything needs to match a value from a cert,
 #  need to verify the encodings all work
+
+
+class RegisterArgs(object):
+    def __init__(self):
+        pass
+
 
 class RHSMAddonData(AddonData):
     """This is a common parent class for loading and storing
@@ -73,35 +92,66 @@ class RHSMAddonData(AddonData):
     """
 
     def __init__(self, name):
+        AddonData.__init__(self, name)
+
         self.name = name
         self.content = ""
         self.header_args = ""
 
         # TODO: make this a data class
-        self.server_url = None
-        self.activation_keys = []
+        self.serverurl = None
+        self.activationkeys = []
         self.auto_attach = True
         self.org = None
 
-        self.line_handlers = {'server-url': self._parse_server_url,
-                              'activation-key': self._parse_activation_key,
+        self.arg_names = {}
+        self.line_handlers = {'serverurl': self._parse_serverurl,
+                              'activationkey': self._parse_activationkey,
                               'auto-attach': self._parse_auto_attach,
                               'org': self._parse_org}
 
     def __str__(self):
         return "%%addon %s %s\n%s%%end\n" % (self.name, self.header_args, self.content)
 
-    def setup(self, storage, ksdata, instClass):
+    def setup(self, storage, ksdata, instclass):
         """Make the changes to the install system.
 
            This method is called before the installation
            is started and directly from spokes. It must be possible
            to call it multiple times without breaking the environment."""
-        super(RHSMAddonData, self).setup(storage, ksdata, instClass)
+        # AddonData.setup(self, storage, ksdata, instclass)
 
         self.log.debug("storage %s", storage)
         self.log.debug("ksdata %s", ksdata)
-        self.log.debug("instClass %s", instClass)
+        self.log.debug("instclass %s", instclass)
+
+    # TODO: remove and use native error handling
+    def _system_exit(self, code, msgs=None):
+        if msgs:
+            if type(msgs) not in [type([]), type(())]:
+                msgs = (msgs, )
+        else:
+            msgs = []
+
+        for msg in msgs:
+            if isinstance(msg, Exception):
+                msg = "%s" % msg
+            log.debug("Error running rhsm_ks: %s", msg)
+
+    def build_args(self):
+        # TODO: build a type for the args
+        #       str/reprs, etc
+        args = []
+        args.append("--serverurl=%s" % self.serverurl)
+        if self.org:
+            args.append("--org=%s" % self.org)
+        if self.activationkeys:
+            for act_key in self.activationkeys:
+                args.append("--activationkey=%s" % act_key)
+        if self.auto_attach:
+            args.append("--auto-attach")
+
+        return args
 
     def execute(self, storage, ksdata, instClass, users):
 
@@ -110,7 +160,20 @@ class RHSMAddonData(AddonData):
            This method is called only once in the post-install
            setup phase.
         """
-#        pass
+        sys_root = getSysroot()
+        log.debug("sys_root=%s", sys_root)
+
+        register_command = managercli.RegisterCommand()
+        args = ["--help"]
+
+        parsed_args = self.build_args()
+        log.debug("parsed_args=%s", parsed_args)
+
+        # sadly, monkeypatch our own managercli to disarm system_exit
+        managercli.system_exit = self._system_exit
+
+        ret = register_command.main(args=args)
+        log.debug("rhsm_ks exit status=%s", ret)
 
     def handle_header(self, lineno, args):
         """Process additional arguments to the %addon line.
@@ -135,11 +198,11 @@ class RHSMAddonData(AddonData):
             return True
         return False
 
-    def _parse_server_url(self, value):
-        self.server_url = value
+    def _parse_serverurl(self, value):
+        self.serverurl = value
 
-    def _parse_activation_key(self, value):
-        self.activation_keys.append(value)
+    def _parse_activationkey(self, value):
+        self.activationkeys.append(value)
 
     def _parse_auto_attach(self, value):
         self.auto_attach = self._bool(value)
@@ -163,7 +226,7 @@ class RHSMAddonData(AddonData):
 
         try:
             self.line_handlers[pre](post)
-        except KeyError, e:
+        except KeyError:
             log.debug("Parse error, unknown RHSM addon ks cmd %s", pre)
 
     def finalize(self):
