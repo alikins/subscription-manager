@@ -219,7 +219,6 @@ class RHSMAddonData(AddonData):
         pre = pre.strip()
         sep = sep.strip()
         # could trailing space be valid for a value?
-        post = post.strip()
         post = post.strip('"')
 
         if pre[0] == '#':

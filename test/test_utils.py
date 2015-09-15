@@ -17,13 +17,6 @@ from rhsm.config import DEFAULT_PORT, DEFAULT_PREFIX, DEFAULT_HOSTNAME, \
 
 class TestParseServerInfo(fixture.SubManFixture):
 
-    def test_default(self):
-        local_url = "https://grimlock.usersys.redhat.com:8443/candlepin"
-        (hostname, port, prefix) = parse_server_info(local_url)
-        self.assertEquals("grimlock.usersys.redhat.com", hostname)
-        self.assertEquals("8443", port)
-        self.assertEquals("/candlepin", prefix)
-
     def test_fully_specified(self):
         local_url = "myhost.example.com:900/myapp"
         (hostname, port, prefix) = parse_server_info(local_url)
