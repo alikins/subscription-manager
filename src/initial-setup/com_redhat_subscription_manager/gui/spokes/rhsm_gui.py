@@ -39,7 +39,7 @@ from subscription_manager.gui import managergui
 from subscription_manager.injectioninit import init_dep_injection
 from subscription_manager import injection as inj
 from subscription_manager.gui import registergui
-from subscription_manager.gui import utils
+from subscription_manager import utils
 
 ga_GObject.threads_init()
 
@@ -56,7 +56,8 @@ class RHSMSpoke(FirstbootOnlySpokeMixIn, NormalSpoke):
     title = "Subscription Manager"
 
     def __init__(self, data, storage, payload, instclass):
-        NormalSpoke.__init__(self, date, storage, payload, instclass)
+        NormalSpoke.__init__(self, data, storage, payload, instclass)
+        self._addon_data = self.data.addons.com_redhat_subscription_manager
         self._done = False
 
     def initialize(self):
@@ -65,7 +66,6 @@ class RHSMSpoke(FirstbootOnlySpokeMixIn, NormalSpoke):
         init_dep_injection()
         log.debug("self.data=%s", self.data)
         log.debug("type(self.data)=%s", type(self.data))
-        #self._data = self.data.addons.com_redhat_subscription_manager
 
         facts = inj.require(inj.FACTS)
 
@@ -117,9 +117,9 @@ class RHSMSpoke(FirstbootOnlySpokeMixIn, NormalSpoke):
     def refresh(self):
         log.debug("data.addons.com_redhat_subscription_manager %s",
                   self.data.addons.com_redhat_subscription_manager)
-        if self._data.serverurl:
-            log.debug("serverurl=%s", self._data.serverurl)
-            (hostname, port, prefix) = utils.parse_server_info(self._data.serverurl)
+        if self._addon_data.serverurl:
+            log.debug("serverurl=%s", self._addon_data.serverurl)
+            (hostname, port, prefix) = utils.parse_server_info(self._addon_data.serverurl)
             self.info.set_property('hostname', hostname)
             self.info.set_property('port', port)
             self.info.set_property('prefix', prefix)
