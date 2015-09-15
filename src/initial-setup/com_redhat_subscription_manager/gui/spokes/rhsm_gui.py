@@ -124,6 +124,20 @@ class RHSMSpoke(FirstbootOnlySpokeMixIn, NormalSpoke):
             self.info.set_property('port', port)
             self.info.set_property('prefix', prefix)
 
+        if self._addon_data.username:
+            self.info.set_property('username', self._addon_data.username)
+
+        if self._addon_data.password:
+            self.info.set_property('password', self._addon_data.password)
+
+        if self._addon_data.org:
+            self.info.set_property('owner_key', self._addon_data.org)
+
+        if self._addon_data.activationkeys:
+            self.info.set_property('activation_keys', self._addon_data.activationkeys)
+
+        self.register_widget.populate_screens()
+
     # take info from the gui widgets and set into the self.data
     def apply(self):
         self.data.addons.com_redhat_subscription_manager.text = \

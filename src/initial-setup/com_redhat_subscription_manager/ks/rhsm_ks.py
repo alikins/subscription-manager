@@ -102,12 +102,20 @@ class RHSMAddonData(AddonData):
         self.serverurl = None
         self.activationkeys = []
         self.auto_attach = True
+
+        self.username = None
+
+        # Unsure if we should support this at all
+        self.password = None
+
         self.org = None
 
         self.arg_names = {}
         self.line_handlers = {'serverurl': self._parse_serverurl,
                               'activationkey': self._parse_activationkey,
                               'auto-attach': self._parse_auto_attach,
+                              'username': self._parse_username,
+                              'password': self._parse_password,
                               'org': self._parse_org}
 
     def __str__(self):
@@ -210,25 +218,32 @@ class RHSMAddonData(AddonData):
     def _parse_org(self, value):
         self.org = value
 
+    def _parse_username(self, value):
+        self.username = value
+
+    def _parse_password(self, value):
+        self.password = value
+
     def handle_line(self, line):
         """Process one kickstart line."""
         self.content += line
 
         line = line.strip()
-        (pre, sep, post) = line.partition('=')
-        pre = pre.strip()
+        (lhs, sep, rhs) = line.partition('=')
+        lhs = lhs.strip()
         sep = sep.strip()
         # could trailing space be valid for a value?
-        post = post.strip()
-        post = post.strip('"')
+        # raw_rhs = rhs[:]
+        rhs = rhs.strip()
+        rhs = rhs.strip('"')
 
-        if pre[0] == '#':
+        if lhs[0] == '#':
             return
 
         try:
-            self.line_handlers[pre](post)
+            self.line_handlers[lhs](rhs)
         except KeyError:
-            log.debug("Parse error, unknown RHSM addon ks cmd %s", pre)
+            log.debug("Parse error, unknown RHSM addon ks cmd %s", lhs)
 
     def finalize(self):
         """No additional data will come.
