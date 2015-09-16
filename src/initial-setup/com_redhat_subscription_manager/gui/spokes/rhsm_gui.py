@@ -35,11 +35,13 @@ from subscription_manager import ga_loader
 ga_loader.init_ga(gtk_version="3")
 
 from subscription_manager.ga import GObject as ga_GObject
+from subscription_manager.ga import Gtk as ga_Gtk
 from subscription_manager.gui import managergui
 from subscription_manager.injectioninit import init_dep_injection
 from subscription_manager import injection as inj
 from subscription_manager.gui import registergui
-from subscription_manager.gui import utils
+from subscription_manager import utils
+from subscription_manager.gui import utils as gui_utils
 
 ga_GObject.threads_init()
 
@@ -66,7 +68,6 @@ class RHSMSpoke(FirstbootOnlySpokeMixIn, NormalSpoke):
         init_dep_injection()
         log.debug("self.data=%s", self.data)
         log.debug("type(self.data)=%s", type(self.data))
-        #self._data = self.data.addons.com_redhat_subscription_manager
 
         facts = inj.require(inj.FACTS)
 
@@ -94,13 +95,14 @@ class RHSMSpoke(FirstbootOnlySpokeMixIn, NormalSpoke):
         self.register_widget.connect('finished', self.finished)
         self.register_widget.connect('register-finished', self.register_finished)
         self.register_widget.connect('register-error', self._on_register_error)
+        self.register_widget.connect('register-message', self._on_register_message)
 
         # update the 'next/register button on page change'
         self.register_widget.connect('notify::register-button-label',
                                        self._on_register_button_label_change)
 
-        self.reg_info.connect('notify::register-status', self._on_register_status_change)
-        self.reg_info.connect('notify::dry-run-result', self._on_dry_run_result_change)
+        self.info.connect('notify::register-status', self._on_register_status_change)
+        self.info.connect('notify::dry-run-result', self._on_dry_run_result_change)
         # We could watch dry-run-result
 
         self.register_box.show_all()
@@ -198,13 +200,27 @@ class RHSMSpoke(FirstbootOnlySpokeMixIn, NormalSpoke):
 
         self.register_widget.emit('proceed')
 
+    # May merge error and message handling, but error can
+    # include tracebacks and alter program flow...
     def _on_register_error(self, widget, msg, exc_info):
         if exc_info:
-            formatted_msg = utils.format_exception(exc_info, msg)
+            formatted_msg = gui_utils.format_exception(exc_info, msg)
             self.set_error(formatted_msg)
         else:
             log.error(msg)
             self.set_error(msg)
+
+    def _on_register_message(self, widget, msg, msg_type=None):
+        # default to info.
+        log.debug("_on_register_message msg=%s msg_type=%s", msg, msg_type)
+        msg_type = msg_type or ga_Gtk.MessageType.INFO
+
+        if msg_type == ga_Gtk.MessageType.INFO:
+            log.debug("set_info")
+            self.set_info(msg)
+        elif msg_type == ga_Gtk.MessageType.WARNING:
+            log.debug("set_warning")
+            self.set_warning(msg)
 
     def _on_register_status_change(self, obj, value):
         self._status_message = obj.get_property('register-status')
