@@ -54,19 +54,11 @@ log = logging.getLogger('rhsm-app.' + __name__)
 
 CFG = config.initConfig()
 
-REGISTERING = 0
-SUBSCRIBING = 1
-state = REGISTERING
 
+class RegisterState(object):
+    REGISTERING = 0
+    SUBSCRIBING = 1
 
-def get_state():
-    global state
-    return state
-
-
-def set_state(new_state):
-    global state
-    state = new_state
 
 ERROR_SCREEN = -3
 DONT_CHANGE = -2
@@ -118,6 +110,11 @@ def reset_resolver():
 
 
 class RegisterInfo(ga_GObject.GObject):
+    """GObject holding registration info and state.
+
+    Used primarily as a way to share this info, while also supporting
+    connecting handlers to the 'notify' signals from RegisterInfos GObject
+    properties."""
 
     username = ga_GObject.property(type=str, default='')
     password = ga_GObject.property(type=str, default='')
@@ -145,7 +142,7 @@ class RegisterInfo(ga_GObject.GObject):
 
     # registergui state info
     details_label_txt = ga_GObject.property(type=str, default='')
-    register_state = ga_GObject.property(type=int, default=REGISTERING)
+    register_state = ga_GObject.property(type=int, default=RegisterState.REGISTERING)
 
     register_status = ga_GObject.property(type=str, default='')
 
@@ -156,13 +153,11 @@ class RegisterInfo(ga_GObject.GObject):
         return id
 
     def __init__(self):
-        log.debug("RegisterInfo.__init__")
         ga_GObject.GObject.__init__(self)
         self._defaults_from_config()
 
     def _defaults_from_config(self):
-        log.debug("RegisterInfo._defaults")
-        # Load the current server values from rhsm.conf:
+        """Load the current server values from configuration (rhsm.conf)."""
         self.set_property('hostname', CFG.get('server', 'hostname'))
         self.set_property('port', CFG.get('server', 'port'))
         self.set_property('prefix', CFG.get('server', 'prefix'))
@@ -211,7 +206,6 @@ class RegisterWidget(widgets.SubmanBaseWidget):
 
         #self.info = reg_info or RegisterInfo()
         self.info = reg_info
-        log.debug("self.info %s", reg_info)
 
         self.progress_timer = None
 
@@ -297,7 +291,6 @@ class RegisterWidget(widgets.SubmanBaseWidget):
                                                               tab_label=None)
 
     def initialize(self):
-        log.debug("%s.initialize", self.__class__.__name__)
         self.set_initial_screen()
         self.clear_screens()
         self.populate_screens()
@@ -325,8 +318,6 @@ class RegisterWidget(widgets.SubmanBaseWidget):
         self.info.set_property('register-status', msg)
 
     def do_register_message(self, msg, msg_type=None):
-        log.debug("do_register_message msg=%s msg_type=%s",
-                   msg, msg_type)
         # NOTE: we ignore msg_type here
         self._go_back_to_last_screen()
         self.info.set_property('register-status', msg)
@@ -360,26 +351,11 @@ class RegisterWidget(widgets.SubmanBaseWidget):
     # on it's properties could trigger a move to 'AttachScreen' for example. Or perhaps
     # a "This is already registered, are you sure?" register screen.
     #
-    # Maybe RegisterWidget via ChooseServerScreen .pre() could decide if it is
-    # a client register or possibly forced.
-    #  clean -> ChooseServerScreen
-    #  dirty -> AreYouSureYouWantToRegisterScreen
     def set_initial_screen(self):
-        log.debug("set_initial_screen current_screen=%s", self.current_screen)
-        log.debug("info.identity=%s", self.info.identity)
-
-        log.debug("idle add a register check")
         ga_GObject.idle_add(self.choose_initial_screen)
-#        self.current_screen.pre()
-        #self.current_screen.emit('move-to-screen', self.initial_screen)
-
-        #self.current_screen
-        #self.screen_history = [self.initial_screen]
 
     def choose_initial_screen(self):
-        log.debug("choose_initial_screen")
         try:
-            log.debug("are we registered?")
             self.info.identity.reload()
         except Exception, e:
             log.exception(e)
@@ -388,20 +364,16 @@ class RegisterWidget(widgets.SubmanBaseWidget):
                       sys.exc_info())
             return False
 
-        log.debug("about to see if identity is_valid")
         if self.info.identity.is_valid():
-            log.debug("identity.is_valid()=True")
             self.emit('register-finished')
             # We are done if auto bind is being skipped ("Manually attach
             # to subscriptions" is clicked in the gui)
             if self.info.get_property('skip-auto-bind'):
                 self.emit('finished')
-            #self.emit('register-error', 'System is already registered', None)
             self.current_screen.emit('move-to-screen', SELECT_SLA_PAGE)
             self.register_widget.show_all()
             return False
 
-        log.debug("Not registered, not doing much")
         self.current_screen.stay()
         self.register_widget.show_all()
         return False
@@ -480,7 +452,6 @@ class RegisterWidget(widgets.SubmanBaseWidget):
 
     # switch-page should be after the current screen is reset
     def _on_switch_page(self, notebook, page, page_num):
-        log.debug("_on_switch_page page=%s page_num=%s", page, page_num)
         if self.current_screen.button_label:
             self.set_property('register-button-label',
                               self.current_screen.button_label)
@@ -580,9 +551,9 @@ class RegisterWidget(widgets.SubmanBaseWidget):
         (the 'register-state' property changed), so update the
         related label on progress page."""
         state = obj.get_property('register-state')
-        if state == REGISTERING:
+        if state == RegisterState.REGISTERING:
             self.progress_label.set_markup(_("<b>Registering</b>"))
-        elif state == SUBSCRIBING:
+        elif state == RegisterState.SUBSCRIBING:
             self.progress_label.set_markup(_("<b>Attaching</b>"))
 
     # Various bits for starting/stopping the timer used to pulse the progress bar
@@ -661,8 +632,6 @@ class RegisterDialog(widgets.SubmanBaseWidget):
 
         self.window = self.register_dialog
 
-        log.debug("%s.__init__", self.__class__.__name__)
-
     def create_wizard_widget(self, backend, facts, reg_info, parent_window):
         """Create a RegisterWidget or subclass and use it for our content."""
 
@@ -673,11 +642,9 @@ class RegisterDialog(widgets.SubmanBaseWidget):
                                        reg_info=reg_info,
                                        parent_window=parent_window)
 
-        log.debug("created_register_widget")
         return register_widget
 
     def initialize(self):
-        log.debug("%s.initialize", self.__class__.__name__)
         self.register_widget.initialize()
 
     def show(self):
@@ -692,13 +659,9 @@ class RegisterDialog(widgets.SubmanBaseWidget):
 
     def on_register_message(self, obj, msg, msg_type=None):
         # NOTE: We ignore the message type here, but initial-setup wont.
-        log.debug("on_register_message obj=%s msg=%s msg_type=%s",
-                  obj, msg, msg_type)
         gui_utils.show_info_window(msg)
 
     def on_register_error(self, obj, msg, exc_list):
-        log.debug("on_register_error obj=%s msg=%s exc_list=%s",
-                  obj, msg, exc_list)
         # TODO: we can add the register state, error type (error or exc)
         if exc_list:
             self.handle_register_exception(obj, msg, exc_list)
@@ -725,9 +688,9 @@ class RegisterDialog(widgets.SubmanBaseWidget):
 
     def _on_register_state_change(self, obj, value):
         state = obj.get_property('register-state')
-        if state == REGISTERING:
+        if state == RegisterState.REGISTERING:
             self.register_dialog.set_title(_("System Registration"))
-        elif state == SUBSCRIBING:
+        elif state == RegisterState.SUBSCRIBING:
             self.register_dialog.set_title(_("Subscription Attachment"))
 
     def _on_register_button_label_change(self, obj, value):
@@ -743,15 +706,10 @@ class AutoBindWidget(RegisterWidget):
 
     def __init__(self, backend, facts, reg_info=None,
                  parent_window=None):
-        import traceback
-        traceback.print_stack()
-        log.debug("AutoBindWidget pre super")
         super(AutoBindWidget, self).__init__(backend, facts, reg_info,
                                              parent_window)
 
     def choose_initial_screen(self):
-        log.debug("%s about to see if identity is_valid", self.__class__.__name__)
-        log.debug("identity.is_valid()=True")
         self.current_screen.emit('move-to-screen', SELECT_SLA_PAGE)
         self.register_widget.show_all()
         return False
@@ -772,7 +730,6 @@ class AutobindWizardDialog(RegisterDialog):
                                          reg_info=reg_info,
                                          parent_window=parent_window)
 
-        log.debug("created_autobind_widget")
         return autobind_widget
 
 
@@ -1065,14 +1022,12 @@ class SelectSLAScreen(Screen):
 
         # The sla the user or kickstart requested
         preferred_sla = self.info.get_property('preferred_sla')
-        log.debug("SelectSLAScreen.set_model preferred_sla=%s", preferred_sla)
 
         # reverse iterate the list as that will most likely put 'None' last.
         # then pack_start so we don't end up with radio buttons at the bottom
         # of the screen.
         chose_default = False
         for sla in reversed(sla_data_map.keys()):
-            log.debug("...sla=%s", sla)
             radio = ga_Gtk.RadioButton(group=group, label=sla)
             radio.connect("toggled",
                           self._radio_clicked,
@@ -1080,7 +1035,6 @@ class SelectSLAScreen(Screen):
             # Use the user preferred sla as the default
             # May need to handle preferred_sla not being in the suggested slas
             if preferred_sla and preferred_sla == sla:
-                log.debug("setting %s to active for %s", radio, sla)
                 radio.set_active(True)
                 chose_default = True
 
@@ -1102,7 +1056,6 @@ class SelectSLAScreen(Screen):
             self.sla_radio_container.remove(child)
 
     def _radio_clicked(self, button, data):
-        log.debug("_radio_clicked: button=%s, data=%s", button, data)
         sla, sla_data_map = data
 
         if button.get_active():
@@ -1203,7 +1156,7 @@ class SelectSLAScreen(Screen):
 
     def pre(self):
         self.info.set_property('details-label-txt', self.pre_message)
-        self.info.set_property('register-state', SUBSCRIBING)
+        self.info.set_property('register-state', RegisterState.SUBSCRIBING)
         self.info.identity.reload()
 
         self.async.find_service_levels(self.info.identity.uuid,
@@ -1401,7 +1354,6 @@ class CredentialsScreen(Screen):
         return True
 
     def populate(self):
-        log.debug("Credentials.populate")
         if self.info.get_property('username'):
             self.account_login.set_text(self.info.get_property('username'))
 
@@ -1533,7 +1485,6 @@ class RefreshSubscriptionsScreen(NoGuiScreen):
         self.pre_message = _("Attaching subscriptions")
 
     def _on_refresh_cb(self, msg, error=None):
-        log.debug("_on_refresh_cb: error=%s msg=%s", error, msg)
         if error is not None:
             self.emit('register-error',
                       _("Error subscribing: %s"),
@@ -1588,11 +1539,6 @@ class ChooseServerScreen(Screen):
             log.warn("Error from reset_resolver: %s", e)
 
     def populate(self):
-        log.debug("ChooseServer.populate")
-        log.debug("hostname=%s port=%s prefix=%s", self.info.get_property('hostname'),
-                                                   self.info.get_property('port'),
-                                                   self.info.get_property('prefix'))
-
         self.set_server_entry(self.info.get_property('hostname'),
                               self.info.get_property('port'),
                               self.info.get_property('prefix'))
@@ -1643,7 +1589,6 @@ class ChooseServerScreen(Screen):
                       None)
             return
 
-        log.debug("Writing server data to rhsm.conf")
         CFG.save()
 
         self.info.set_property('hostname', hostname)
@@ -1996,12 +1941,10 @@ class InfoScreen(Screen):
     def apply(self):
         self.stay()
         if self.register_radio.get_active():
-            log.debug("Proceeding with registration.")
             self.emit('move-to-screen', CHOOSE_SERVER_PAGE)
             return
 
         else:
-            log.debug("Skipping registration.")
             self.emit('move-to-screen', FINISH)
 
     def _on_why_register_button_clicked(self, button):
